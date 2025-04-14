@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from reststop_module import get_nearby_reststops, choose_best_reststop
+from reststop_module import get_nearby_reststops
 from weather_module import get_weather
 from openai_module import classify_intent
 from utils import get_greeting, user_preferences
