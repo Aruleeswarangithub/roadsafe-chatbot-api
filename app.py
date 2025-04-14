@@ -7,6 +7,11 @@ import os
 
 app = Flask(__name__)
 
+@app.route('/')
+def home():
+    return "Welcome to the Sandy Assistant API!"
+
+
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.get_json()
