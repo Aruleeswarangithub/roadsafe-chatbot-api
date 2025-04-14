@@ -61,7 +61,7 @@ def chat():
         best_stop = choose_best_reststop()
         if isinstance(best_stop, str):  # In case there are no suitable rest stops
             return jsonify({"reply": best_stop})
-        return jsonify({"reply": f"Based on your preferences, I suggest: {best_stop['name']}. Ready to navigate?"})
+        return jsonify({"reply": best_stop})
 
     # 🧠 Default fallback
     logging.info("Fallback response")

@@ -69,4 +69,7 @@ def choose_best_reststop():
     global last_search_results
     if not last_search_results:
         return "Please ask for nearby places first!"
-    return last_search_results[0]
+    
+    # For best rest stop, return the first (closest) from last_search_results
+    best_stop = last_search_results[0]
+    return f"The best option nearby is: {best_stop['name']} ({best_stop['distance']} km)"
