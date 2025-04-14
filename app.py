@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from reststop_module import get_nearby_reststops
+from reststop_module import get_nearby_reststops, choose_best_reststop
 from weather_module import get_weather
 from openai_module import classify_intent
 from utils import get_greeting, user_preferences
@@ -58,7 +58,7 @@ def chat():
     # 🤖 Follow-up: best rest stop
     elif "best" in message and "rest stop" in message:
         logging.info("Best rest stop query detected")
-        best_stop = choose_best_reststop(lat, lon, prefs)
+        best_stop = choose_best_reststop()
         if isinstance(best_stop, str):  # In case there are no suitable rest stops
             return jsonify({"reply": best_stop})
         return jsonify({"reply": f"Based on your preferences, I suggest: {best_stop['name']}. Ready to navigate?"})

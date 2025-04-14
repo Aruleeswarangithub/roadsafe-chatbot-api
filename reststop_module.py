@@ -1,70 +1,72 @@
-# reststop_module.py
 import requests
 from math import radians, cos, sin, asin, sqrt
 
-OVERPASS_API_URL = "http://overpass-api.de/api/interpreter"
+# Store session-level memory of last search results
+last_search_results = []
 
-# Supported preference mappings to OSM amenities
-PREFERENCE_TO_OSM = {
-    "fuel": "fuel",
-    "cafe": "cafe",
-    "hotel": "hotel",
-    "charging": "charging_station",
-    "mechanic": "car_repair",
-    "shop": "shop"
-}
-
-def haversine(lon1, lat1, lon2, lat2):
+def haversine(lat1, lon1, lat2, lon2):
     """
-    Calculate the great-circle distance between two points.
+    Calculates the great circle distance (in km) between two points.
     """
-    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a))
-    km = 6371 * c
-    return km
+    R = 6371  # Earth radius in km
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+    return R * 2 * asin(sqrt(a))
 
 def get_nearby_reststops(lat, lon, prefs):
-    elements = []
+    """
+    Uses OpenStreetMap Overpass API to fetch POIs like fuel stations, cafes, etc.
+    Stores results for later ranking.
+    """
+    global last_search_results
+    last_search_results = []  # Clear previous
+
+    # Map user preferences to OSM tags
+    osm_tags = {
+        "fuel": 'amenity=fuel',
+        "cafe": 'amenity=cafe',
+        "hotel": 'tourism=hotel',
+        "charging": 'amenity=charging_station',
+        "mechanic": 'shop=car_repair',
+        "shop": 'shop=yes'
+    }
+
+    results = []
     for pref in prefs:
-        if pref not in PREFERENCE_TO_OSM:
+        if pref not in osm_tags:
             continue
-        osm_tag = PREFERENCE_TO_OSM[pref]
+        tag = osm_tags[pref]
+        overpass_url = "http://overpass-api.de/api/interpreter"
         query = f"""
-        [out:json][timeout:25];
-        (
-          node["amenity"="{osm_tag}"](around:10000,{lat},{lon});
-          way["amenity"="{osm_tag}"](around:10000,{lat},{lon});
-          relation["amenity"="{osm_tag}"](around:10000,{lat},{lon});
-        );
-        out center;
+        [out:json];
+        node[{tag}](around:3000,{lat},{lon});
+        out body;
         """
-        response = requests.post(OVERPASS_API_URL, data={"data": query})
-        if response.status_code == 200:
-            elements += response.json().get("elements", [])
-    
-    reststops = []
-    for el in elements:
-        name = el.get("tags", {}).get("name", "Unnamed Location")
-        el_lat = el.get("lat") or el.get("center", {}).get("lat")
-        el_lon = el.get("lon") or el.get("center", {}).get("lon")
-        distance = haversine(lon, lat, el_lon, el_lat)
-        reststops.append({
-            "name": name,
-            "lat": el_lat,
-            "lon": el_lon,
-            "distance_km": round(distance, 2)
-        })
+        res = requests.get(overpass_url, params={"data": query})
+        data = res.json()
 
-    return sorted(reststops, key=lambda x: x["distance_km"])
+        for element in data.get("elements", []):
+            name = element.get("tags", {}).get("name", f"Unnamed {pref.title()}")
+            dist = round(haversine(lat, lon, element["lat"], element["lon"]), 2)
+            results.append({
+                "name": name,
+                "type": pref,
+                "lat": element["lat"],
+                "lon": element["lon"],
+                "distance": dist
+            })
 
-def choose_best_reststop(lat, lon, prefs):
+    # Sort by distance
+    results.sort(key=lambda x: x["distance"])
+    last_search_results = results  # Save for ranking later
+    return results if results else "No nearby rest stops found."
+
+def choose_best_reststop():
     """
-    Chooses the closest rest stop from OSM results based on distance.
+    Returns the closest option from last_search_results.
     """
-    nearby = get_nearby_reststops(lat, lon, prefs)
-    if not nearby:
-        return "No suitable rest stops found."
-    return nearby[0]
+    global last_search_results
+    if not last_search_results:
+        return "Please ask for nearby places first!"
+    return last_search_results[0]
