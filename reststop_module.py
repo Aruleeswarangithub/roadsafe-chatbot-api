@@ -1,39 +1,69 @@
 # reststop_module.py
-import random
+import requests
+
+OVERPASS_URL = "http://overpass-api.de/api/interpreter"
+
+# Supported amenities to match rest stop types
+AMENITY_KEYWORDS = {
+    "fuel": "fuel",
+    "cafe": "cafe",
+    "hotel": "hotel",
+    "shop": "convenience",
+    "charging": "charging_station",
+    "mechanic": "car_repair",
+    "parking": "parking"
+}
+
+def build_overpass_query(lat, lon, prefs):
+    """Constructs an Overpass QL query based on preferences and location."""
+    radius = 3000  # 3 km radius
+    filters = []
+
+    for pref in prefs:
+        amenity = AMENITY_KEYWORDS.get(pref)
+        if amenity:
+            filters.append(f'node["amenity"="{amenity}"](around:{radius},{lat},{lon});')
+
+    if not filters:
+        return None
+
+    query = f"""
+    [out:json];
+    (
+        {"".join(filters)}
+    );
+    out body;
+    """
+    return query
 
 def get_nearby_reststops(lat, lon, prefs):
-    """
-    Returns a list of nearby rest stops based on the user's preferences.
-    The preferences can include "fuel", "cafe", "hotel", etc.
-    """
-    # Stubbed rest stops data (this could come from an API or database)
-    all_reststops = [
-        {"name": "Fuel & Cafe Stop", "type": ["fuel", "cafe"], "rating": 4.5},
-        {"name": "Highway Hotel", "type": ["hotel"], "rating": 4.0},
-        {"name": "Quick Garage", "type": ["mechanic"], "rating": 3.8},
-        {"name": "EV Fast Charge", "type": ["charging"], "rating": 4.2},
-        {"name": "Highway ShopZone", "type": ["shop"], "rating": 4.1},
-    ]
-    
-    # Filter based on user preferences
-    filtered = [stop for stop in all_reststops if any(p in stop["type"] for p in prefs)]
-    
-    # Return a message if no rest stops match the preferences
-    if not filtered:
-        return "No suitable rest stops found."
-    
-    return filtered
+    """Calls Overpass API to find nearby rest stops matching user preferences."""
+    query = build_overpass_query(lat, lon, prefs)
+    if not query:
+        return "No supported preferences found."
 
-def choose_best_reststop(lat, lon, prefs):
-    """
-    Chooses the best rest stop based on the highest rating.
-    Returns the best rest stop.
-    """
-    options = get_nearby_reststops(lat, lon, prefs)
-    
-    # Check if no options were returned
-    if isinstance(options, str):  # In case we got the "No suitable rest stops found."
-        return options
-    
-    best_stop = max(options, key=lambda x: x["rating"])
-    return best_stop
+    response = requests.post(OVERPASS_URL, data={"data": query})
+
+    if response.status_code != 200:
+        return "Failed to fetch data from Overpass API."
+
+    data = response.json()
+    elements = data.get("elements", [])
+
+    if not elements:
+        return "No suitable rest stops found nearby."
+
+    stops = []
+    for el in elements:
+        name = el.get("tags", {}).get("name", "Unnamed")
+        amenity = el.get("tags", {}).get("amenity", "Unknown")
+        lat = el.get("lat")
+        lon = el.get("lon")
+        stops.append({
+            "name": name,
+            "type": amenity,
+            "lat": lat,
+            "lon": lon
+        })
+
+    return stops
