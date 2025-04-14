@@ -5,11 +5,6 @@ from openai_module import classify_intent
 from utils import get_greeting, user_preferences
 import os
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Use PORT from env or fallback to 5000
-    app.run(host='0.0.0.0', port=port, debug=True)
-
-
 app = Flask(__name__)
 
 @app.route('/chat', methods=['POST'])
@@ -49,8 +44,6 @@ def chat():
     # 🧠 Default fallback
     return jsonify({"reply": "I'm Sandy, your assistant. I can help with directions, weather, or nearby places!"})
 
-
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))  
     app.run(host='0.0.0.0', port=port, debug=True)
-
