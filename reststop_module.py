@@ -1,69 +1,70 @@
 # reststop_module.py
 import requests
+from math import radians, cos, sin, asin, sqrt
 
-OVERPASS_URL = "http://overpass-api.de/api/interpreter"
+OVERPASS_API_URL = "http://overpass-api.de/api/interpreter"
 
-# Supported amenities to match rest stop types
-AMENITY_KEYWORDS = {
+# Supported preference mappings to OSM amenities
+PREFERENCE_TO_OSM = {
     "fuel": "fuel",
     "cafe": "cafe",
     "hotel": "hotel",
-    "shop": "convenience",
     "charging": "charging_station",
     "mechanic": "car_repair",
-    "parking": "parking"
+    "shop": "shop"
 }
 
-def build_overpass_query(lat, lon, prefs):
-    """Constructs an Overpass QL query based on preferences and location."""
-    radius = 3000  # 3 km radius
-    filters = []
-
-    for pref in prefs:
-        amenity = AMENITY_KEYWORDS.get(pref)
-        if amenity:
-            filters.append(f'node["amenity"="{amenity}"](around:{radius},{lat},{lon});')
-
-    if not filters:
-        return None
-
-    query = f"""
-    [out:json];
-    (
-        {"".join(filters)}
-    );
-    out body;
+def haversine(lon1, lat1, lon2, lat2):
     """
-    return query
+    Calculate the great-circle distance between two points.
+    """
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    km = 6371 * c
+    return km
 
 def get_nearby_reststops(lat, lon, prefs):
-    """Calls Overpass API to find nearby rest stops matching user preferences."""
-    query = build_overpass_query(lat, lon, prefs)
-    if not query:
-        return "No supported preferences found."
-
-    response = requests.post(OVERPASS_URL, data={"data": query})
-
-    if response.status_code != 200:
-        return "Failed to fetch data from Overpass API."
-
-    data = response.json()
-    elements = data.get("elements", [])
-
-    if not elements:
-        return "No suitable rest stops found nearby."
-
-    stops = []
+    elements = []
+    for pref in prefs:
+        if pref not in PREFERENCE_TO_OSM:
+            continue
+        osm_tag = PREFERENCE_TO_OSM[pref]
+        query = f"""
+        [out:json][timeout:25];
+        (
+          node["amenity"="{osm_tag}"](around:10000,{lat},{lon});
+          way["amenity"="{osm_tag}"](around:10000,{lat},{lon});
+          relation["amenity"="{osm_tag}"](around:10000,{lat},{lon});
+        );
+        out center;
+        """
+        response = requests.post(OVERPASS_API_URL, data={"data": query})
+        if response.status_code == 200:
+            elements += response.json().get("elements", [])
+    
+    reststops = []
     for el in elements:
-        name = el.get("tags", {}).get("name", "Unnamed")
-        amenity = el.get("tags", {}).get("amenity", "Unknown")
-        lat = el.get("lat")
-        lon = el.get("lon")
-        stops.append({
+        name = el.get("tags", {}).get("name", "Unnamed Location")
+        el_lat = el.get("lat") or el.get("center", {}).get("lat")
+        el_lon = el.get("lon") or el.get("center", {}).get("lon")
+        distance = haversine(lon, lat, el_lon, el_lat)
+        reststops.append({
             "name": name,
-            "type": amenity,
-            "lat": lat,
-            "lon": lon
+            "lat": el_lat,
+            "lon": el_lon,
+            "distance_km": round(distance, 2)
         })
 
-    return stops
+    return sorted(reststops, key=lambda x: x["distance_km"])
+
+def choose_best_reststop(lat, lon, prefs):
+    """
+    Chooses the closest rest stop from OSM results based on distance.
+    """
+    nearby = get_nearby_reststops(lat, lon, prefs)
+    if not nearby:
+        return "No suitable rest stops found."
+    return nearby[0]
