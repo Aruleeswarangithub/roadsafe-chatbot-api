@@ -1,10 +1,13 @@
+# utils.py
 import datetime
 import random
 
+# Default user preferences (could be extended or dynamic)
 user_preferences = {
     "default": ["fuel", "cafe"]
 }
 
+# Greetings based on time of day
 greetings_by_time = {
     "morning": [
         "Good morning! 😊 I’m Sandy, ready to help.",
@@ -24,6 +27,9 @@ greetings_by_time = {
 }
 
 def get_greeting():
+    """
+    Returns a greeting based on the time of day.
+    """
     hour = datetime.datetime.now().hour
     if hour < 12:
         time_period = "morning"
