@@ -3,7 +3,7 @@
 from flask import Flask, request, jsonify
 from reststop_module import get_nearby_reststops, choose_best_reststop
 from weather_module import get_weather
-from openmapapi_module import classify_intent
+from openai_module import classify_intent
 from utils import get_greeting, user_preferences
 import os
 import logging
