@@ -1,14 +1,16 @@
+# reststop_module.py
+
 import requests
 from math import radians, cos, sin, asin, sqrt
 
-# Store session-level memory of last search results
+# Session-level memory
 last_search_results = []
 
 def haversine(lat1, lon1, lat2, lon2):
     """
-    Calculates the great circle distance (in km) between two points.
+    Calculates the great circle distance between two points on the Earth (in km).
     """
-    R = 6371  # Earth radius in km
+    R = 6371
     dlat = radians(lat2 - lat1)
     dlon = radians(lon2 - lon1)
     a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
@@ -16,13 +18,11 @@ def haversine(lat1, lon1, lat2, lon2):
 
 def get_nearby_reststops(lat, lon, prefs):
     """
-    Uses OpenStreetMap Overpass API to fetch POIs like fuel stations, cafes, etc.
-    Stores results for later ranking.
+    Uses OpenStreetMap Overpass API to fetch filtered places like fuel stations, cafes, etc.
     """
     global last_search_results
-    last_search_results = []  # Clear previous
+    last_search_results = []
 
-    # Map user preferences to OSM tags
     osm_tags = {
         "fuel": 'amenity=fuel',
         "cafe": 'amenity=cafe',
@@ -33,9 +33,11 @@ def get_nearby_reststops(lat, lon, prefs):
     }
 
     results = []
+
     for pref in prefs:
         if pref not in osm_tags:
             continue
+
         tag = osm_tags[pref]
         overpass_url = "http://overpass-api.de/api/interpreter"
         query = f"""
@@ -43,33 +45,33 @@ def get_nearby_reststops(lat, lon, prefs):
         node[{tag}](around:3000,{lat},{lon});
         out body;
         """
-        res = requests.get(overpass_url, params={"data": query})
-        data = res.json()
+        try:
+            response = requests.get(overpass_url, params={"data": query}, timeout=10)
+            data = response.json()
+        except Exception as e:
+            return f"Error fetching data: {e}"
 
         for element in data.get("elements", []):
             name = element.get("tags", {}).get("name", f"Unnamed {pref.title()}")
-            dist = round(haversine(lat, lon, element["lat"], element["lon"]), 2)
+            distance_km = round(haversine(lat, lon, element["lat"], element["lon"]), 2)
             results.append({
                 "name": name,
                 "type": pref,
                 "lat": element["lat"],
                 "lon": element["lon"],
-                "distance": dist
+                "distance": distance_km
             })
 
-    # Sort by distance
     results.sort(key=lambda x: x["distance"])
-    last_search_results = results  # Save for ranking later
-    return results if results else "No nearby rest stops found."
+    last_search_results = results
+
+    return results if results else "Sorry, I couldn't find any nearby results for that."
 
 def choose_best_reststop():
     """
-    Returns the closest option from last_search_results.
+    Returns the closest rest stop from the last search.
     """
     global last_search_results
     if not last_search_results:
-        return "Please ask for nearby places first!"
-    
-    # For best rest stop, return the first (closest) from last_search_results
-    best_stop = last_search_results[0]
-    return f"The best option nearby is: {best_stop['name']} ({best_stop['distance']} km)"
+        return "Please search for nearby places first."
+    return last_search_results[0]
